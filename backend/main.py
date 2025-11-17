@@ -1,7 +1,16 @@
 from fastapi import FastAPI
-# from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.docs import get_redoc_html
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from typing import Union
+# from enum import Enum
+
+class Item(BaseModel):
+    name: str
+    description: Union[str, None] = None
+    price: float
+    tax: Union[float, None] = None
 
 app = FastAPI(redoc_url=None, docs_url="/docs")
 
@@ -11,6 +20,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Chrome doesn't like getting the redoc js file from the normal URL, so I am hosting it as a static asset.
 @app.get("/redoc", include_in_schema=False)
 async def redoc_html():
+    assert app.openapi_url is not None
     return get_redoc_html(
         openapi_url=app.openapi_url,
         title=app.title + " - ReDoc",
@@ -20,3 +30,25 @@ async def redoc_html():
 @app.get("/")
 async def root():
     return {"message": "Hello World!"}
+
+@app.get("/items/{item_id}")
+async def read_item(item_id: int):
+    return {"item_id": item_id}
+
+@app.post("/items/")
+async def create_item(item: Item):
+    # Creates a dict from the item specified in the request body.
+    # Uses model_dump() because dict() is deprecated in Pydantic v2's BaseModel.
+    item_dict = item.model_dump()
+    # Adds a new member named price_with_tax to the item dict if a tax was specified in the request body.
+    if item.tax is not None:
+        price_with_tax = item.price + item.tax
+        item_dict.update({"price_with_tax": price_with_tax})
+    return item
+
+@app.put("/items/{item_id}")
+async def update_item(item_id: int, item: Item, queryParam1: Union[str, None] = None):
+    result = {"item_id": item_id, **item.model_dump()}
+    if queryParam1:
+        result.update({"queryParam1": queryParam1})
+    return result
