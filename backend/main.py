@@ -49,8 +49,32 @@ async def read_item(item_id: int):
 # Imagine this URL: http://localhost:8000/items/?q=foo&q=bar
 # You get this result: {"q": ["foo", "bar"]}
 @app.get("/items/")
-async def read_items(q: Annotated[list[str], Query()] = ["default", "list"]):
-    query_items = {"q": q}
+async def read_items(
+    q: Annotated[list[str], Query()] = ["default", "list"],
+    jazzed_up_param:
+        Annotated[
+            Union[str, None],
+            Query(
+                # Since item-query is not a valid Python variable name, use alias to change how the param must appear in the URL.
+                # Note that this is not an alternative name. It REPLACES the programmatic name of the query parameter.
+                alias="item-query",
+                title="Fancy Parameter",
+                description="It doesn't do much, but it sure is fancy",
+                min_length=3,
+                # Oh no, we don't like this param anymore, but we have to keep it for awhile! Now it shows as deprecated on documentation.
+                deprecated=True
+                )
+            ] = None,
+    hidden_param:
+        Annotated[
+            Union[str, None],
+            Query(
+                # Now this parameter won't appear in the schema/documentation.
+                include_in_schema=False
+            )
+        ] = None
+    ):
+    query_items = {"q": q, "jazzed_up_param": jazzed_up_param}
     return query_items
 
 @app.post("/items/")
