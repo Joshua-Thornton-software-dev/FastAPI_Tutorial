@@ -1,9 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.openapi.docs import get_redoc_html
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-
-from typing import Union
+from typing import Annotated, Any, Dict, Union
 # from enum import Enum
 
 class Item(BaseModel):
@@ -31,9 +30,19 @@ async def redoc_html():
 async def root():
     return {"message": "Hello World!"}
 
+# Read a single item by its ID
 @app.get("/items/{item_id}")
 async def read_item(item_id: int):
     return {"item_id": item_id}
+
+# Get all items with optional additional queries... or that's the idea, at least.
+# Requires that if q is provided, it must be between 3 and 50 characters... and must be the exact value "fixedquery".
+@app.get("/items/")
+async def read_items(q: Annotated[Union[str, None], Query(min_length=3, max_length=50, pattern="^fixedquery$")] = None):
+    results: Dict[str, Any] = {"items": [{"item_id": "Foo"}, {"item_id": "Bar"}]}
+    if q:
+        results.update({"q": q})
+    return results
 
 @app.post("/items/")
 async def create_item(item: Item):
