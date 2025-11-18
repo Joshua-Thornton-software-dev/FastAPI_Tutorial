@@ -1,9 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.openapi.docs import get_redoc_html
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-
-from typing import Union
+from pydantic import AfterValidator, BaseModel
+from typing import Any, Dict, Union
+from typing_extensions import Annotated
 # from enum import Enum
 
 class Item(BaseModel):
@@ -16,6 +16,11 @@ app = FastAPI(redoc_url=None, docs_url="/docs")
 
 # Mount static files.
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+book_data = {
+    "isbn-9781529046137": "The Hitchhiker's Guide to the Galaxy",
+    "isbn-9781439512982": "Isaac Asimov: The Complete Stories, Vol. 2",
+}
 
 # Chrome doesn't like getting the redoc js file from the normal URL, so I am hosting it as a static asset.
 @app.get("/redoc", include_in_schema=False)
@@ -31,9 +36,51 @@ async def redoc_html():
 async def root():
     return {"message": "Hello World!"}
 
+# Read a single item by its ID
 @app.get("/items/{item_id}")
 async def read_item(item_id: int):
     return {"item_id": item_id}
+
+# Get all items with optional additional queries... or that's the idea, at least. Learning about validations in query parameters.
+# Requires that if q is provided, it must be between 3 and 50 characters... and must be the exact value "fixedquery".
+# @app.get("/items/")
+# async def read_items(q: Annotated[Union[str, None], Query(min_length=3, max_length=50, pattern="^fixedquery$")] = None):
+#     results: Dict[str, Any] = {"items": [{"item_id": "Foo"}, {"item_id": "Bar"}]}
+#     if q:
+#         results.update({"q": q})
+#     return results
+
+# Learning about receiving multiple values in query parameters.
+# Imagine this URL: http://localhost:8000/items/?q=foo&q=bar
+# You get this result: {"q": ["foo", "bar"]}
+@app.get("/items/")
+async def read_items(
+    q: Annotated[list[str], Query()] = ["default", "list"],
+    jazzed_up_param:
+        Annotated[
+            Union[str, None],
+            Query(
+                # Since item-query is not a valid Python variable name, use alias to change how the param must appear in the URL.
+                # Note that this is not an alternative name. It REPLACES the programmatic name of the query parameter.
+                alias="item-query",
+                title="Fancy Parameter",
+                description="It doesn't do much, but it sure is fancy",
+                min_length=3,
+                # Oh no, we don't like this param anymore, but we have to keep it for awhile! Now it shows as deprecated on documentation.
+                deprecated=True
+                )
+            ] = None,
+    hidden_param:
+        Annotated[
+            Union[str, None],
+            Query(
+                # Now this parameter won't appear in the schema/documentation.
+                include_in_schema=False
+            )
+        ] = None
+    ):
+    query_items = {"q": q, "jazzed_up_param": jazzed_up_param}
+    return query_items
 
 @app.post("/items/")
 async def create_item(item: Item):
@@ -52,3 +99,21 @@ async def update_item(item_id: int, item: Item, queryParam1: Union[str, None] = 
     if queryParam1:
         result.update({"queryParam1": queryParam1})
     return result
+
+def check_valid_isbn(isbn: str):
+    if not isbn.startswith("isbn-"):
+        raise ValueError('Invalid format. Must start with "isbn-"')
+    return isbn
+
+@app.get("/items/books/{isbn}")
+async def read_book(
+    isbn:
+        Annotated[
+            str,
+            AfterValidator(check_valid_isbn)
+        ]
+):
+    book = "None Found"
+    if isbn:
+        book = book_data.get(isbn)
+    return book
